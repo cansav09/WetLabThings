@@ -27,7 +27,6 @@
 ##################################################################################################
 ####### Install Packages if you don't have them ###############
 library(readxl)
-library(XLConnect)
 library(colorspace)
 
 ##### This function will calculate standard error #######
@@ -43,7 +42,7 @@ grubbs.pvalcutoff=.05
 badsamples="P2-E1-027"
 
 # Change "home" variable below to the directory of where your input files are stored.
-home="/Users/cansav091/Desktop/Current Projects /Western Blots/WesternBlotQuantifications"
+home="/Users/cansav091/Desktop/CurrentProjects/WesternBlots/P2E4AdultDieldrinWesterns/P2E4OriginalData"
 setwd(home)
 
 ####### This will make a list of the files in your current directory
@@ -154,7 +153,7 @@ adj.sig=(dat$Total[1:n]-dat$Total[(n+1):(2*n)])
 ##################################################################################################
 
 ##### Create a 4x4 panel plot with variations on Std Curve and a boxplot for that particular gel
-  jpeg(paste0(target[jj],"Gel",ii,"Std Curve Graphs.jpeg"))
+  jpeg(paste0(target[jj],"Gel",ii,"StdCurveGraphs.jpeg"))
   par(mfrow=c(2,2),oma = c(0, 0, 2, 0)) 
 
 ### Plot Amounts vs the Adj signals 
@@ -173,10 +172,10 @@ adj.sig=(dat$Total[1:n]-dat$Total[(n+1):(2*n)])
   legend(x="bottomright", legend = levels(groups.stds),fill=c("yellow","red","orange","black"),cex=.8)
 
 #### Plot REVERT against the signal - background
-  reg=lm(revert$Total[which(groups.stds=="Standard")]~(dat$Total-dat$Bkgnd.)[stdswells])
+  reg=lm(revert$Total[which(groups.stds=="Standard")]~(dat$Total[1:n]-dat$Total[(n+1):(2*n)])[stdswells])
   Rval=summary(reg)$r.squared
   pval=summary(reg)$coefficients[8]
-  plot((dat$Total[1:n]-dat$Total[(n+1):(2*n)]),revert$Mean[1:17],main=paste("Total Protein R = ",round(Rval,3),"p=",round(pval,3)),xlab="Total-Bckgnd",ylab="REVERT Total",pch=21,bg=c("yellow","red","orange","black")[groups.stds])
+  plot((dat$Total[1:n]-dat$Total[(n+1):(2*n)]),revert$Total,main=paste("Total Protein R = ",round(Rval,3),"p=",round(pval,3)),xlab="Total-Bckgnd",ylab="REVERT Total",pch=21,bg=c("yellow","red","orange","black")[groups.stds])
   abline(reg,col="red")
   legend(x="bottomright", legend = levels(groups.stds),fill=c("yellow","red","orange","black"),cex=.8)
 
@@ -212,7 +211,7 @@ combogroups=factor(combogroups,unique(combogroups))
 #####################################################################################################################################
 
 ## Read in the chart of standards for Grubbs Tests 
-grubbs.chart=read.csv("/Users/cansav091/Desktop/Current Projects /Western Blots/WesternBlotQuantifications/GrubbsCutoffs.csv")
+grubbs.chart=read.csv("/Users/cansav091/Desktop/CurrentProjects/WesternBlots/WesternBlotQuantCode/GrubbsCutoffs.csv")
 ### Obtain averages by group
 group.avg=tapply(comboestimatedvals,combogroups.stds,mean)
 ### Obtain sd's by group
