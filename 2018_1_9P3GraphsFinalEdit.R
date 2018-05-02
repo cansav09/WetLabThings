@@ -2,16 +2,17 @@
 
 setwd("/Users/cansav091/Desktop/CurrentProjects/WesternBlots/P3E4DevDieldrinWesterns/")
 std.e <- function(x) sd(x)/sqrt(length(x))
-files=grep("output",dir(),value=TRUE)
+
+files=grep("AllClean",dir(),value=TRUE)
 
 dat=rbind(read.csv(files[1]),read.csv(files[2]))
-dat=cbind(dat,as.factor(c(rep("Female",54),rep("Male",54))))
+dat=cbind(dat,as.factor(c(rep("Female",72),rep("Male",72))))
 colnames(dat)[16]="Sex"
 dat=dat[-which(dat$Treatment=="Standard"),]
 #badsamples=c("P2-E1-027")
 #dat=dat[is.na(match(dat$Sample,badsamples)),]
 
-target=c("TH","DAT","VMAT2")
+target=c("TH","DAT","VMAT2","DAT.VMAT2")
 
 aovs=c()
 rev.aovs=c()
@@ -39,9 +40,16 @@ for(ii in 1:length(target)){
 
     avg=tapply(target.data$EstimatVals.RelRevert,tx.groups,mean)
     
-    bars=barplot(avg,names=c("0","0.3"),mgp=c(2.5,1,0),cex.main=3,border=NA,cex.names=1.5,cex.lab=1.25,cex.sub=1,cex.axis = 1.5,cex.lab=1.2,ylim=c(0,20),xlab="Dieldrin (mg/kg)",ylab=paste0("Striatal ",target[ii],"\n (Relative Units)"),col="black")
+    if(target[ii]=="DAT.VMAT2"){
+    bars=barplot(avg,names=c("0","0.3"),mgp=c(2.5,1,0),cex.main=3,border=NA,cex.names=1.5,cex.lab=1.25,cex.sub=1,cex.axis = 1.5,cex.lab=1.2,ylim=c(0,1.5),xlab="Dieldrin (mg/kg)",ylab=paste0("Striatal DAT/VMAT2","\n (Relative Units)"),col="black")
+    axis(side=1,at=c(0,.70,1.9,3.1,4.3,5),lwd=3,labels=FALSE)
+    axis(side=2,at=c(0,1,1.4),lwd=3,labels=FALSE)
+    }else{
+    bars=barplot(avg,names=c("0","0.3"),mgp=c(2.5,1,0),cex.main=3,border=NA,cex.names=1.5,cex.lab=1.25,cex.sub=1,cex.axis = 1.5,cex.lab=1.2,ylim=c(0,22),xlab="Dieldrin (mg/kg)",ylab=paste0("Striatal ",target[ii],"\n (Relative Units)"),col="black")
     axis(side=1,at=c(0,.70,1.9,3.1,4.3,5),lwd=3,labels=FALSE)
     axis(side=2,at=c(0,5,10,15,20),lwd=3,labels=FALSE)
+    }
+
     
 
     ses=c(std.e(target.data$EstimatVals.RelRevert[xx]),std.e(target.data$EstimatVals.RelRevert[-xx]))
@@ -50,11 +58,12 @@ for(ii in 1:length(target)){
     arrows(bars, avg - ses * 2, bars,  avg + ses * 2, lwd = 3, angle = 90, code = 3, length = 0.2)
     dev.off()
     
-}
+  }
 }
 t.tests=t.tests[-1,]
 rownames(t.tests)=rnames
 write.csv(t.tests,"t-test results P3.csv")
+
 
 
 

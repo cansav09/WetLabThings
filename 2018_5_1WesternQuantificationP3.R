@@ -37,13 +37,15 @@ target=c("TH","DAT","VMAT2")
 ### If you'd like the outlier test to be more stringent, you can change the cutoff in the line below:
 ### Options for p value cutoffs: 0.1,.075,.05,.025,.01
 grubbs.pvalcutoff=.05
-sex="Male"
+output="Male"
 
 ### For known bad samples that need to be removed, put their names here: 
-#badsamples="P2-E1-027"
+remove=c("10ug STD","10ug STD")
+names(remove)=c("THFemale2","DATFemale2")# note the target and data set and replicate of the standard/sample you want to remove.
+
 
 # Change "home" variable below to the directory of where your input files are stored.
-home="/Users/cansav091/Desktop/CurrentProjects/Western Blots/WesternBlotQuantifications"
+home="/Users/cansav091/Desktop/CurrentProjects/WesternBlots/P3E4DevDieldrinWesterns/P3OriginalData"
 setwd(home)
 
 ####### This will make a list of the files in your current directory
@@ -79,38 +81,55 @@ for(jj in 1:length(target)){
   comboestimatedvals=c() #### This will have the estimate values for each sample from our linear model using our standards divided by relative revert values
   comboamounts=c() #### This will have the micrograms of lysate that were pipetted in. 
   combobckgnd=c()
-  
+  comboremove=c()
 # This loop will repeat for each gel data file for the given target
-for(ii in 1:length(proj)){
-  setwd(home)
+    for(ii in 1:length(proj)){
+    setwd(home)
 ### Read in the gel set up file.
-  gelsetup=t(read_xlsx(gelssetup,sheet=ii))[,1:3]
-  Sex=ifelse(ii==1,"Female","Male")
+    gelsetup=t(read_xlsx(gelssetup[ii]))[,1:3]
+    sex=ifelse(ii==1,"Female","Male")
+    
 ### Sort out the Ladders and empty wells from the data. 
-  wells=gelsetup[,1]
-  nonemptywells=grep("Empty",wells,ignore.case=TRUE,invert=TRUE)
-  wells=wells[nonemptywells]
-  ladderwells=grep("Ladder",wells,ignore.case=TRUE)
-  wells=wells[-ladderwells]
-  wells=wells[!is.na(wells)]
-  
+    wells=gelsetup[,1]
+    nonemptywells=grep("Empty",wells,ignore.case=TRUE,invert=TRUE)
+    wells=wells[nonemptywells]
+    ladderwells=grep("Ladder",wells,ignore.case=TRUE)
+    wells=wells[-ladderwells]
+    wells=wells[!is.na(wells)]
+    ### Take note of the N of your sample size including standards
+    n=length(wells)
+    
+    ### Take note of indices of samples/standards to remove from the analysis. (Will still be in table)
+    if(length(remove)>0){
+        xx=grep(target[jj],grep(sex,names(remove),value=TRUE))
+        pos=as.numeric(substr(names(remove)[xx],nchar(names(remove)[xx]),nchar(names(remove)[xx])))
+        removed=rep("kept",n)
+        if(length(xx)>0){
+            xx=grep(remove[xx],wells)[pos]
+            removed[xx]="removed"
+            xx=(1:length(wells))[-xx]
+        }else{
+          xx=1:length(wells)
+          removed=rep("kept",n)
+        }
+    }else{
+        xx=1:length(wells)
+        removed=rep("kept",n)
+    }
 ### Extract the amounts of lysate pipetted in each well
-  amounts=as.numeric(gsub("ug","",gelsetup[nonemptywells,3]))[-ladderwells]
-  combogelsetup=rbind(combogelsetup,gelsetup[nonemptywells,][-ladderwells,])
+    amounts=as.numeric(gsub("ug","",gelsetup[nonemptywells,3]))[-ladderwells]
+    combogelsetup=rbind(combogelsetup,gelsetup[nonemptywells,][-ladderwells,])
 
 ### Label which lanes are standards  
-  stds=gsub("ug","",wells)
-  stds=gsub(" STD","",stds)
-  stds=as.numeric(stds)
-  stdswells=which(!is.na(stds))
-  stds=stds[stdswells]
+    stds=gsub("ug","",wells[xx])
+    stds=gsub(" STD","",stds)
+    stds=as.numeric(stds)
+    stdswells=which(!is.na(stds))
+    stds=stds[stdswells]
 
 ### Label which lanes are samples
-  samplewells=wells[-stdswells]
+  samplewells=wells[xx][-stdswells]
   samples=wells[samplewells]
-  
-### Take note of the N of your sample size including standards
-  n=length(wells)
 
 ### Keep the group info for the different treatments and standards
   groups.stds=as.factor(gelsetup[,2][as.numeric(names(wells))])
@@ -130,7 +149,7 @@ for(ii in 1:length(proj)){
   ### Transforms the total into a numeric variable
   revert[,4:ncol(revert)]=suppressWarnings(apply(revert[,4:ncol(revert)],2,as.numeric))
   
-  if(Sex=="Male"){
+  if(sex=="Male"){
     if(target[jj]=="VMAT2"){
       dat=rbind(dat[c(17:18,16,1,5:15,2:4),],dat[c(17:18,16,1,5:15,2:4)+18,])
       revert=revert[c(17:18,16,1,5:15,2:4),]
@@ -138,12 +157,12 @@ for(ii in 1:length(proj)){
   }
 ### Combine gel quant data, revert data,background data, tx groups, and amounts pipetted from both gels.
   combodat=rbind(combodat,dat[1:n,])
-  comborev=rbind(comborev,revert)
+  comborev=rbind(comborev,revert[,-c(14:16)])
   combobckgnd=rbind(combobckgnd,dat[(n+1):(2*n),])
   comboamounts=c(comboamounts,amounts)
   combogroups=c(combogroups,groups) # This variable has the treatment groups but doesn't include standards
   combogroups.stds=c(combogroups.stds,groups.stds) ## This group variable includes standards
-  
+  comboremove=c(comboremove,removed)
 ####Create a folder for the output using the target name
 fold.name=paste0(target[jj],"output")
 if(dir.exists(fold.name)==FALSE){
@@ -154,52 +173,53 @@ setwd(paste0(home,"/",fold.name)) # Set the directory to the new folder.
 ##### Adjusted signal means the signal - background (not the local background that ImageJ does, but the background that we take ourselves separately)  
 adj.sig=(dat$Total[1:n]-dat$Total[(n+1):(2*n)])
 
-
 ##################################################################################################
 ################### Analyze the standard curve for this particular gel by itself  ################
 ##################################################################################################
 
 ##### Create a 4x4 panel plot with variations on Std Curve and a boxplot for that particular gel
-  jpeg(paste0(target[jj],Sex,"StdCurves.jpeg"))
+  jpeg(paste0(target[jj],sex,"StdCurves.jpeg"))
   par(mfrow=c(2,2),oma = c(0, 0, 2, 0)) 
   colorz=c("green","orange","black")
 ### Plot Amounts vs the Adj signals 
-  reg=lm(adj.sig[stdswells]~stds)
+  reg=lm(adj.sig[xx][stdswells]~amounts[xx][stdswells])
   Rval=summary(reg)$r.squared
   pval=summary(reg)$coefficients[8]
-  plot(amounts[1:n],adj.sig,main=paste("Total-Bckgnd R=",round(Rval,3),"p=",round(pval,3)),xlab="Total ug ",ylab="Total-Bckgnd",pch=21, bg=colorz[groups.stds])
+  plot(amounts[xx],adj.sig[xx],main=paste("Total-Bckgnd R=",round(Rval,3),"p=",round(pval,3)),xlab="Total ug ",ylab="Total-Bckgnd",pch=21, bg=colorz[groups.stds][xx])
   abline(reg,col="red")
-  legend(x="bottomright", legend = levels(groups.stds),fill=colorz,cex=.8)
+  legend(x="bottomright", legend = levels(groups.stds[xx]),fill=colorz,cex=.8)
 
 ### Plot Amounts vs the REVERT signals
-  reg=lm(revert$Total[which(groups.stds=="Standard")]~stds)
-  plot(amounts,revert$Total[1:n],main=paste("Total Protein Total R = ",round(Rval,3),"p=",round(pval,3)),xlab="Total ug",ylab="REVERT Total",pch=21, bg=colorz[groups.stds])
-  revnormal=reg$coefficients[2]*revert$Total
-  abline(reg,col="red")
-  legend(x="bottomright", legend = levels(groups.stds),fill=colorz,cex=.8)
-
-#### Plot REVERT against the signal - background
-  reg=lm(revert$Mean[which(groups.stds=="Standard")]~(dat$Total[1:n]-dat$Total[(n+1):(2*n)])[stdswells])
+  reg=lm(revert$Total[xx][stdswells]~amounts[xx][stdswells])
   Rval=summary(reg)$r.squared
   pval=summary(reg)$coefficients[8]
-  plot((dat$Total[1:n]-dat$Total[(n+1):(2*n)]),revert$Mean,main=paste("Total Protein R = ",round(Rval,3),"p=",round(pval,3)),xlab="Total-Bckgnd",ylab="REVERT Total",pch=21,bg=colorz[groups.stds])
+  plot(amounts[xx],revert$Total[xx],main=paste("Total Protein Total R = ",round(Rval,3),"p=",round(pval,3)),xlab="Total ug",ylab="REVERT Total",pch=21, bg=colorz[groups.stds][xx])
   abline(reg,col="red")
-  legend(x="bottomright", legend = levels(groups.stds),fill=colorz,cex=.8)
+  legend(x="bottomright", legend = levels(groups.stds[xx]),fill=colorz,cex=.8)
+
+#### Plot REVERT against the signal - background
+  reg=lm(revert$Total[xx][stdswells]~(dat$Total[1:n]-dat$Total[(n+1):(2*n)])[xx][stdswells])
+  Rval=summary(reg)$r.squared
+  pval=summary(reg)$coefficients[8]
+  plot(adj.sig[xx],revert$Total[xx],main=paste("Total Protein R = ",round(Rval,3),"p=",round(pval,3)),xlab="Total-Bckgnd",ylab="REVERT Total",pch=21,bg=colorz[groups.stds][xx])
+  abline(reg,col="red")
+  legend(x="bottomright", legend = levels(groups.stds[xx]),fill=colorz,cex=.8)
 
 
 #####################################################################################################################################
 # Use the linear model from our standards to create a normalized and estimated relative quantity for each sample  ###################
 #####################################################################################################################################
 
-  if(length(samples)>0){
+    if(length(samples)>0){
 ### Calculate a "Relative Revert" by dividing every revert signal by the smallest REVERT signal in that particular gel
-rel.revert=revert$Total/sort(revert$Total[-stdswells])[1]   
+    rel.revert=revert$Total/sort(revert$Total[xx][stdswells])[1]
 
     ###### Linear model using our standards:
-    reg=lm(amounts[stdswells]~adj.sig[stdswells])
+    reg=lm(amounts[xx][stdswells]~adj.sig[xx][stdswells])
     ###### Plot the linear model with it's p value:
-    p=round(summary(reg)$coefficients[8],4)
-    plot(amounts[stdswells],adj.sig[stdswells],main="Regression",sub=paste0("p=",p))
+    Rval=summary(reg)$r.squared
+    pval=summary(reg)$coefficients[8]
+    plot(amounts[xx][stdswells],adj.sig[xx][stdswells],main="Regression",sub=paste0("p=",round(pval,3)))
     abline(reg,col="red")# Put the slope of the line
     
     ####### Calculate Samples' estimated values based on the above linear model using our standards and divide by "relative revert"
@@ -207,7 +227,7 @@ rel.revert=revert$Total/sort(revert$Total[-stdswells])[1]
     ####### Combine the estimated values for both gels for this target
     comboestimatedvals=c(comboestimatedvals,estimatedvals)
   }
-  dev.off()##### The 4x4 graph will print out 
+  dev.off()##### The 4x4 graph will output out 
   }
 
 ####### This piece of code re-orders the factor to be Control, Low, High, instead of the default of being alphabetical
@@ -218,7 +238,7 @@ combogroups=factor(combogroups,unique(combogroups))
 #####################################################################################################################################
 
 ## Read in the chart of standards for Grubbs Tests 
-grubbs.chart=read.csv("/Users/cansav091/Desktop/CurrentProjects/Western Blots/WesternBlotQuantifications/GrubbsCutoffs.csv")
+grubbs.chart=read.csv("/Users/cansav091/Desktop/CurrentProjects/WesternBlots/WesternBlotQuantCode/GrubbsCutoffs.csv")
 ### Obtain averages by group
 group.avg=tapply(comboestimatedvals,combogroups.stds,mean)
 ### Obtain sd's by group
@@ -246,12 +266,12 @@ outliers.column[xx]="Outlier"
 #####################################################################################################################################
 
 ####### Put the cleaned data in one big dataframe that we will write to a csv
-target.data=cbind(rep(target[jj],length(comboamounts)),comboestimatedvals*rel.revert,comboestimatedvals,rel.revert,(combodat$Total-combobckgnd$Total)/comborev$Total,combobckgnd$Total,combodat$Total,comborev$Total,comboamounts,combogelsetup[,1:2],c(rep("Gel1",nrow(comborev)/2),rep("Gel2",nrow(comborev)/2)),groups.z.scores,outliers.column)
-colnames(target.data)=c("Target","EstimatedVals","EstimatVals.RelRevert","RelRevert","AdjSig","Backgr","Total","Revert","Amount","Sample","Treatment","Gel","ZScoresByGroups","OutlierCall")
+target.data=cbind(rep(target[jj],length(comboamounts)),comboestimatedvals*rel.revert,comboestimatedvals,rel.revert,(combodat$Total-combobckgnd$Total)/comborev$Total,combobckgnd$Total,combodat$Total,comborev$Total,comboamounts,combogelsetup[,1:2],c(rep("Gel1",nrow(comborev)/2),rep("Gel2",nrow(comborev)/2)),comboremove,groups.z.scores,outliers.column)
+colnames(target.data)=c("Target","EstimatedVals","EstimatVals.RelRevert","RelRevert","AdjSig","Backgr","Total","Revert","Amount","Sample","Treatment","Gel","Removed","ZScoresByGroups","OutlierCall")
 
   if(jj==1){
   alldata=target.data
-  colnames(alldata)=c("Target","EstimatedVals","EstimatVals.RelRevert","RelRevert","AdjSig","Backgr","Total","Revert","Amount","Sample","Treatment","Gel","ZScoresByGroups","OutlierCall")
+  colnames(alldata)=c("Target","EstimatedVals","EstimatVals.RelRevert","RelRevert","AdjSig","Backgr","Total","Revert","Amount","Sample","Treatment","Gel","Removed","ZScoresByGroups","OutlierCall")
   }else{
   alldata=rbind(alldata,target.data)
   }
@@ -264,18 +284,18 @@ write.csv(target.data[which(target.data$Gel=="Gel2"),],file=paste0(target[jj],"C
 assign(target[jj],alldata, envir=.GlobalEnv)
 
 ### Determine which data are standards so you can remove them from the ANOVA
-if(sex=="Male"){
+if(output=="Male"){
 target.data=target.data[which(alldata$Gel=="Gel2"),]
 }
-if(sex=="Female"){
+if(output=="Female"){
   target.data=target.data[which(alldata$Gel=="Gel1"),]
 }
 
 xx=which(target.data$Treatment=="Standard")
-groups=factor(target.data$Treatment[-xx],unique(target.data$Treatment[-xx]))
+groups=factor(target.data$Treatment,unique(target.data$Treatment))
 
 #### Do ANOVA for the both gels' data for this target
-target.aov=aov(target.data$EstimatVals.RelRevert[-xx]~groups)
+target.aov=aov(target.data$EstimatVals.RelRevert~groups)
 
 #### Post Hoc Analyses
 target.posthoc=t(as.data.frame(TukeyHSD(target.aov)$groups))
@@ -301,9 +321,9 @@ dir.create(paste0("FinalResultsFolder"))
 }
 setwd(paste0(home,"/FinalResultsFolder"))
 
-write.csv(alldata,file=paste0("AllTargetsCleanData",sex,".csv"))
-write.csv(all.aovs,file=paste0("AllWesternANOVAResults",sex,".csv"),na="NA")
-write.csv(all.posthocs,file=paste0("AllWesternPostHocResults",sex,".csv"),na="NA")
+write.csv(alldata,file=paste0("AllTargetsCleanData",output,".csv"))
+write.csv(all.aovs,file=paste0("AllWesternANOVAResults",output,".csv"),na="NA")
+write.csv(all.posthocs,file=paste0("AllWesternPostHocResults",output,".csv"),na="NA")
 
 groups=factor(alldata$Treatment,unique(alldata$Treatment))
 
@@ -314,19 +334,19 @@ groups=factor(alldata$Treatment,unique(alldata$Treatment))
 alldata.females=alldata[which(alldata$Gel=="Gel1"),]
 alldata.males=alldata[which(alldata$Gel=="Gel2"),]
 
-if(sex=="Male"){
+if(output=="Male"){
   alldata=alldata.males
-  write.csv(alldata.males,file=paste0("AllTargetsCleanData",sex,".csv"))
+  write.csv(alldata.males,file=paste0("AllTargetsCleanData",output,".csv"))
 
 }
-if(sex=="Female"){
+if(output=="Female"){
   alldata=alldata.females
-  write.csv(alldata.females,file=paste0("AllTargetsCleanData",sex,".csv"))
+  write.csv(alldata.females,file=paste0("AllTargetsCleanData",output,".csv"))
   
 }
 
 groups=factor(alldata$Treatment,unique(alldata$Treatment))
-jpeg(paste0("AllTargetsBoxplot",sex,".jpeg"),width=800,height=500)
+jpeg(paste0("AllTargetsBoxplot",output,".jpeg"),width=800,height=500)
 par(mfrow=c(1,length(target)),oma = c(0, 4, 0, 0)) 
 
 for(ii in 1:length(target)){
@@ -344,7 +364,7 @@ dev.off()
 ############# Create a barplot for all the targets in a single graph using SE bars ##################################################
 #####################################################################################################################################
 
-jpeg(paste0("AllTargetsBarplot",sex,".jpeg"),width=800,height=500)
+jpeg(paste0("AllTargetsBarplot",output,".jpeg"),width=800,height=500)
 par(mfrow=c(1,length(target)),oma = c(0, 4, 0, 0)) 
 
 for(ii in 1:length(target)){
